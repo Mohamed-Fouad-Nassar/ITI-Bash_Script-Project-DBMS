@@ -140,7 +140,25 @@ function listTables {
   fi
 }
 
- 
+function dropTable {
+  # عرض أسماء الجداول فقط
+  tables=$(ls "$DB_PATH" | grep -v "\.metadata$")
+  if [[ -z "$tables" ]]; then
+    zenity --info --text="No tables to drop"
+    return
+  fi
+
+  table=$(zenity --list --title="Drop Table" --column="Tables" $tables)
+  if [[ -z "$table" ]]; then
+    zenity --warning --text="No table selected"
+    return
+  fi
+
+  # حذف الجدول وملف الميتاداتا المرتبط به
+  rm -f "$DB_PATH/$table" "$DB_PATH/$table.metadata"
+  zenity --info --text="Table '$table' dropped successfully"
+}
+
 
 
 Menu;
