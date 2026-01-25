@@ -1,41 +1,164 @@
 #!/bin/bash
 
-cd $1;
-cur_db_name=$1;
+DB_NAME="$1"
+DB_PATH="./$DB_NAME"
 
-# Main DB Menu
-function dbMenu {
-  option=` zenity --list --title="Welcome to $cur_db_name DB, Please select an option to start" --column="Options" "Create Table" "List Tables" "Drop Table" "Insert in Table" "Select from Table" "Delete from Table" "Update Table" "Exit" `;
+# ===== Table Menu =====
+function Menu {
 
-  case $option in
-    "Create Table")
-      exit 0;
-      ;;
-    "List Tables")
-      exit 0;
-      ;;
-    "Drop Table")
-      exit 0;
-      ;;
-    "Insert in Table")
-      exit 0;
-      ;;
-    "Select from Table")
-      exit 0;
-      ;;
-    "Delete from Table")
-      exit 0;
-      ;;
-    "Update Table")
-      exit 0;
-      ;;
-    "Exit")
-      exit 0;
-      ;;
-    *) 
-      echo "Invalid option";
-      ;;
-  esac
+  while true; do
+    option=$(zenity --list \
+      --title="Connected to Database: $DB_NAME" \
+      --column="Options" \
+      "Create Table" \
+      "List Tables" \
+      "Drop Table" \
+      "Insert Into Table" \
+      "Select From Table" \
+      "Delete From Table" \
+      "Update Table" \
+      "Back to Main Menu")
+
+    case $option in
+
+      "Create Table")
+        createTable
+        ;;
+
+      "List Tables")
+        listTables
+        ;;
+
+      "Drop Table")
+        dropTable
+        ;;
+
+      "Insert Into Table")
+        insertTable
+        ;;
+
+      "Select From Table")
+        selectTable
+        ;;
+
+      "Delete From Table")
+        deleteTable
+        ;;
+
+      "Update Table")
+        updateTable
+        ;;
+
+      "Back to Main Menu")
+        break
+        ;;
+
+      *)
+        zenity --warning --text="Invalid option, please select again"
+        ;;
+    esac
+  done
 }
 
-dbMenu;
+# ===== Create Table =====
+function createTable {
+
+  while true; do
+    table_name=$(zenity --entry --title="Create Table" --text="Enter Table Name (First letter Capital):")
+    
+# Check if table name is empty
+if [[ -z "$table_name" ]]; then
+    zenity --warning --text="Table name cannot be empty"
+    continue
+fi
+
+# Check if first letter is Capital
+if [[ ! "$table_name" =~ ^[A-Z] ]]; then
+    zenity --warning --text="Table name must start with a Capital letter"
+    continue
+fi
+
+#  Check if rest are valid characters
+if [[ ! "$table_name" =~ ^[A-Z][a-zA-Z0-9]*$ ]]; then
+    zenity --warning --text="Table name can contain only letters and numbers"
+    continue
+fi
+
+    # check if table exists
+    existing=$(ls "$DB_PATH" | grep -i "^$table_name$")
+    if [[ ! -z "$existing" ]]; then
+      zenity --warning --text="Table '$table_name' already exists"
+      continue
+    fi
+
+    # Create table files
+    touch "$DB_PATH/$table_name"
+    touch "$DB_PATH/$table_name.metadata"
+
+    # Add automatic id column
+    echo "id:int:PK" >> "$DB_PATH/$table_name.metadata"
+
+    # Ask for number of columns excluding id
+    cols_num=$(zenity --entry --title="Columns" --text="Enter number of columns :")
+    if ! [[ "$cols_num" =~ ^[0-9]+$ ]] || [[ "$cols_num" -lt 1 ]]; then
+      zenity --warning --text="Invalid number of columns"
+      rm "$DB_PATH/$table_name" "$DB_PATH/$table_name.metadata"
+      continue
+    fi
+
+    # Add other columns
+    for (( i=1; i<=cols_num; i++ )); do
+      col_name=$(zenity --entry --title="Column $i" --text="Enter column name:")
+      if [[ -z "$col_name" || "$col_name" == "id" ]]; then
+        zenity --warning --text="Invalid column name or 'id' is reserved"
+        rm "$DB_PATH/$table_name" "$DB_PATH/$table_name.metadata"
+        continue 2
+      fi
+
+      col_type=$(zenity --list --title="Column Type for '$col_name'" --column="Type" "int" "string")
+      if [[ -z "$col_type" ]]; then
+        zenity --warning --text="You must select a data type"
+        rm "$DB_PATH/$table_name" "$DB_PATH/$table_name.metadata"
+        continue 2
+      fi
+
+      echo "$col_name:$col_type" >> "$DB_PATH/$table_name.metadata"
+    done
+
+    zenity --info --text="Table '$table_name' created successfully"
+    break
+  done
+}
+function listTables {
+  # عرض الملفات بدون امتداد .metadata
+  tables=$(ls "$DB_PATH" | grep -v "\.metadata$")
+
+  if [[ -z "$tables" ]]; then
+    zenity --info --text="No tables found in this database"
+  else
+    zenity --list --title="Tables in $DB_NAME" --column="Table Name" $tables
+  fi
+}
+
+function dropTable {
+  # عرض أسماء الجداول فقط
+  tables=$(ls "$DB_PATH" | grep -v "\.metadata$")
+  if [[ -z "$tables" ]]; then
+    zenity --info --text="No tables to drop"
+    return
+  fi
+
+  table=$(zenity --list --title="Drop Table" --column="Tables" $tables)
+  if [[ -z "$table" ]]; then
+    zenity --warning --text="No table selected"
+    return
+  fi
+
+  # حذف الجدول وملف الميتاداتا المرتبط به
+  rm -f "$DB_PATH/$table" "$DB_PATH/$table.metadata"
+  zenity --info --text="Table '$table' dropped successfully"
+}
+
+
+
+Menu;
