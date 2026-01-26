@@ -72,25 +72,19 @@ if [[ -z "$table_name" ]]; then
     continue
 fi
 
-# Check if first letter is Capital
-if [[ ! "$table_name" =~ ^[A-Z] ]]; then
-    zenity --warning --text="Table name must start with a Capital letter"
-    continue
-fi
-
+ 
 #  Check if rest are valid characters
-if [[ ! "$table_name" =~ ^[A-Z][a-zA-Z0-9]*$ ]]; then
+if [[ ! "$table_name" =~ ^[A-Za-z][a-zA-Z0-9]*$ ]]; then
     zenity --warning --text="Table name can contain only letters and numbers"
     continue
 fi
 
     # check if table exists
-    existing=$(ls "$DB_PATH" | grep -i "^$table_name$")
-    if [[ ! -z "$existing" ]]; then
-      zenity --warning --text="Table '$table_name' already exists"
-      continue
-    fi
-
+existing=$(ls "$DB_PATH" | grep -i "^$table_name$")
+if [[ -n "$existing" ]]; then
+    zenity --warning --text="Table '$table_name' already exists"
+    continue
+fi
     # Create table files
     touch "$DB_PATH/$table_name"
     touch "$DB_PATH/$table_name.metadata"
@@ -128,35 +122,6 @@ fi
     zenity --info --text="Table '$table_name' created successfully"
     break
   done
-}
-function listTables {
-  # عرض الملفات بدون امتداد .metadata
-  tables=$(ls "$DB_PATH" | grep -v "\.metadata$")
-
-  if [[ -z "$tables" ]]; then
-    zenity --info --text="No tables found in this database"
-  else
-    zenity --list --title="Tables in $DB_NAME" --column="Table Name" $tables
-  fi
-}
-
-function dropTable {
-  # عرض أسماء الجداول فقط
-  tables=$(ls "$DB_PATH" | grep -v "\.metadata$")
-  if [[ -z "$tables" ]]; then
-    zenity --info --text="No tables to drop"
-    return
-  fi
-
-  table=$(zenity --list --title="Drop Table" --column="Tables" $tables)
-  if [[ -z "$table" ]]; then
-    zenity --warning --text="No table selected"
-    return
-  fi
-
-  # حذف الجدول وملف الميتاداتا المرتبط به
-  rm -f "$DB_PATH/$table" "$DB_PATH/$table.metadata"
-  zenity --info --text="Table '$table' dropped successfully"
 }
 
 
