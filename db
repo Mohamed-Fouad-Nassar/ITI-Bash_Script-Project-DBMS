@@ -236,6 +236,78 @@ function insertTable {
   echo "$record" >> "$data_file"
   zenity --info --text="Record inserted successfully into table '$table'"
 }
+function updateTable {
+
+  # ===== List Tables =====
+  tables=$(ls "$DB_PATH" | grep -vE "\.(metadata|data)$")
+  [[ -z "$tables" ]] && {
+    zenity --info --text="No tables found"
+    return
+  }
+
+  table_input=$(zenity --list --title="Update Table" --column="Tables" $tables)
+  [[ -z "$table_input" ]] && return
+
+  table=$(ls "$DB_PATH" | awk -v t="$table_input" 'tolower($0)==tolower(t)')
+  meta_file="$DB_PATH/$table.metadata"
+  data_file="$DB_PATH/$table.data"
+
+  [[ ! -s "$data_file" ]] && {
+    zenity --info --text="Table '$table' has no data"
+    return
+  }
+
+  # ===== Choose Record by ID =====
+  ids=$(cut -d':' -f1 "$data_file")
+  record_id=$(zenity --list --title="Select Record ID" --column="ID" $ids)
+  [[ -z "$record_id" ]] && return
+
+  # ===== Get Columns (Except ID) =====
+  cols=()
+  while IFS=: read -r name type key; do
+    [[ "$name" != "id" ]] && cols+=("$name")
+  done < "$meta_file"
+
+  col_name=$(zenity --list --title="Select Column to Update" --column="Columns" "${cols[@]}")
+  [[ -z "$col_name" ]] && return
+
+  # ===== Get Column Type =====
+  col_type=$(awk -F: -v c="$col_name" '$1==c {print $2}' "$meta_file")
+
+  # ===== Get Column Index =====
+  col_index=$(awk -F: -v c="$col_name" '
+    BEGIN{idx=0}
+    {idx++}
+    $1==c {print idx}
+  ' "$meta_file")
+
+  # ===== New Value =====
+  while true; do
+    new_value=$(zenity --entry --title="Update Value" --text="Enter new value for $col_name ($col_type)")
+    [[ -z "$new_value" ]] && {
+      zenity --warning --text="Value cannot be empty"
+      continue
+    }
+
+    if [[ "$col_type" == "int" && ! "$new_value" =~ ^[0-9]+$ ]]; then
+      zenity --warning --text="$col_name must be a number"
+      continue
+    fi
+
+    if [[ "$col_type" == "string" && "$new_value" == *":"* ]]; then
+      zenity --warning --text="':' character is not allowed"
+      continue
+    fi
+    break
+  done
+
+  # ===== Update Record =====
+  awk -F: -v OFS=: -v id="$record_id" -v idx="$col_index" -v val="$new_value" '
+    $1==id {$idx=val} {print}
+  ' "$data_file" > "$data_file.tmp" && mv "$data_file.tmp" "$data_file"
+
+  zenity --info --text="Record with ID $record_id updated successfully"
+}
 
 
 Menu;
