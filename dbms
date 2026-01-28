@@ -88,7 +88,11 @@ function main {
         exit 0
         ;;
       *)
-        zenity --warning --text="Invalid choice, please select again"
+        if [ $? -eq 1 ]
+        then
+          exit 1;
+        fi
+        zenity --warning --text="Invalid choice, please select again";
         ;;
     esac
   done

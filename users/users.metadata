@@ -1,0 +1,4 @@
+id:int:PK
+name:string
+email:string
+age:int
