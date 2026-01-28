@@ -85,6 +85,59 @@ function select_where {
   column -t -s '|' <<< "$result";
 }
 
+# Delete from table
+function delete_from_table {
+  get_tables_count;
+
+  tables=` ls *.txt | sed 's/\.txt$//' `
+  table_name=` zenity --list --title="Please select an option to start" --column="Tables" $tables `;
+
+  if [ ! -f "$table_name.txt" ]
+  then
+    echo "Table not found";
+    exit 1;
+  fi
+
+  columns=$(head -n 1 "$table_name.txt");
+  IFS='|' read -ra cols <<< "$columns";
+
+  attr=`  zenity --list --title="Please select an column to start" --column="Attributes" ${cols[@]} `;
+  value=`  zenity --entry --title="Input required" --text="Enter value to delete:" `;
+
+  col_index=0;
+  for i in "${!cols[@]}"
+  do
+    if [ "${cols[$i]}" = "$attr" ];
+    then
+      col_index=$((i + 1));
+      break;
+    fi
+  done
+
+  match=` awk -F '|' -v col="$col_index" -v val="$value" '{ if (NR > 1 && $col == val) print $0; }' "$table_name.txt" `;
+
+  if [ -z "$match" ];
+  then
+    zenity --info --text="No matching records found";
+    exit 1;
+  fi
+
+  zenity --question --text="Are you sure you want to delete these records?";
+  if [ $? -ne 0 ]
+  then
+    exit 0;
+  fi
+
+  awk -F '|' -v col="$col_index" -v val="$value" '
+    NR==1 {print; next}
+    $col != val {print}
+  ' "$table_name.txt" > temp.txt
+
+  mv temp.txt "$table_name.txt"
+
+  zenity --info --text="Record(s) deleted successfully!"
+}
+
 # ===== Create Table =====
 function createTable {
   while true; do
@@ -283,7 +336,7 @@ function dbMenu {
       select_from_table;
       ;;
     "Delete from Table")
-      exit 0;
+      delete_from_table;
       ;;
     "Update Table")
       exit 0;
