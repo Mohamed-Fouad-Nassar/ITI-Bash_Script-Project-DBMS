@@ -1,11 +1,9 @@
 #!/bin/bash
 
 DB_NAME="$1"
-DB_PATH="./$DB_NAME"
 
 # ===== Table Menu =====
 function Menu {
-
   while true; do
     option=$(zenity --list \
       --title="Connected to Database: $DB_NAME" \
@@ -20,103 +18,53 @@ function Menu {
       "Back to Main Menu")
 
     case $option in
-
-      "Create Table")
-        createTable
-        ;;
-
-      "List Tables")
-        listTables
-        ;;
-
-      "Drop Table")
-        dropTable
-        ;;
-
-      "Insert Into Table")
-        insertTable
-        ;;
-
-      "Select From Table")
-        selectTable
-        ;;
-
-      "Delete From Table")
-        deleteTable
-        ;;
-
-      "Update Table")
-        updateTable
-        ;;
-
-      "Back to Main Menu")
-        break
-        ;;
-
-      *)
-        zenity --warning --text="Invalid option, please select again"
-        ;;
+      "Create Table") createTable ;;
+      "List Tables") listTables ;;
+      "Drop Table") dropTable ;;
+      "Insert Into Table") insertTable ;;
+      "Select From Table") selectTable ;;
+      "Delete From Table") deleteTable ;;
+      "Update Table") updateTable ;;
+      "Back to Main Menu") break ;;
+      *) zenity --warning --text="Invalid option, please select again" ;;
     esac
   done
 }
 
 # ===== Create Table =====
 function createTable {
-
   while true; do
     table_name=$(zenity --entry --title="Create Table" --text="Enter Table Name ")
-    
-# Check if table name is empty
-if [[ -z "$table_name" ]]; then
-    zenity --warning --text="Table name cannot be empty"
-    continue
-fi
 
- 
-#  Check if rest are valid characters
-if [[ ! "$table_name" =~ ^[A-Za-z][a-zA-Z0-9]*$ ]]; then
-    zenity --warning --text="Table name can contain only letters and numbers"
-    continue
-fi
+    [[ -z "$table_name" ]] && { zenity --warning --text="Table name cannot be empty"; continue; }
+    [[ ! "$table_name" =~ ^[A-Za-z][a-zA-Z0-9]*$ ]] && { zenity --warning --text="Table name can contain only letters and numbers"; continue; }
 
-    # check if table exists
-existing=$(ls "$DB_PATH" | grep -i "^$table_name$")
-if [[ -n "$existing" ]]; then
-    zenity --warning --text="Table '$table_name' already exists"
-    continue
-fi
+    # Check if table exists (look for metadata)
+    existing=$(ls *.metadata 2>/dev/null | grep -i "^$table_name.metadata$")
+    [[ -n "$existing" ]] && { zenity --warning --text="Table '$table_name' already exists"; continue; }
+
     # Create table files
-    touch "$DB_PATH/$table_name"
-    touch "$DB_PATH/$table_name.metadata"
+    touch "$table_name.metadata" "$table_name.data"
 
     # Add automatic id column
-    echo "id:int:PK" >> "$DB_PATH/$table_name.metadata"
+    echo "id:int:PK" >> "$table_name.metadata"
 
-    # Ask for number of columns excluding id
-    cols_num=$(zenity --entry --title="Columns" --text="Enter number of columns :")
+    # Add other columns
+    cols_num=$(zenity --entry --title="Columns" --text="Enter number of columns:")
     if ! [[ "$cols_num" =~ ^[0-9]+$ ]] || [[ "$cols_num" -lt 1 ]]; then
       zenity --warning --text="Invalid number of columns"
-      rm "$DB_PATH/$table_name" "$DB_PATH/$table_name.metadata"
+      rm "$table_name.metadata" "$table_name.data"
       continue
     fi
 
-    # Add other columns
-    for (( i=1; i<=cols_num; i++ )); do
+    for ((i=1; i<=cols_num; i++)); do
       col_name=$(zenity --entry --title="Column $i" --text="Enter column name:")
-      if [[ -z "$col_name" || "$col_name" == "id" ]]; then
-        zenity --warning --text="Invalid column name or 'id' is reserved"
-        rm "$DB_PATH/$table_name" "$DB_PATH/$table_name.metadata"
-        continue 2
-      fi
+      [[ -z "$col_name" || "$col_name" == "id" ]] && { zenity --warning --text="Invalid column name or 'id' is reserved"; rm "$table_name.metadata" "$table_name.data"; continue 2; }
 
       col_type=$(zenity --list --title="Column Type for '$col_name'" --column="Type" "int" "string")
-      if [[ -z "$col_type" ]]; then
-        zenity --warning --text="You must select a data type"
-        rm "$DB_PATH/$table_name" "$DB_PATH/$table_name.metadata"
-        continue 2
-      fi
+      [[ -z "$col_type" ]] && { zenity --warning --text="You must select a data type"; rm "$table_name.metadata" "$table_name.data"; continue 2; }
 
-      echo "$col_name:$col_type" >> "$DB_PATH/$table_name.metadata"
+      echo "$col_name:$col_type" >> "$table_name.metadata"
     done
 
     zenity --info --text="Table '$table_name' created successfully"
@@ -124,184 +72,115 @@ fi
   done
 }
 
-
+# ===== List Tables =====
 function listTables {
-  # جلب أسماء الجداول فقط (بدون .metadata و .data)
-  tables=$(ls "$DB_PATH" \
-    | grep -v "\.metadata$" \
-    | grep -v "\.data$")
+  tables=$(ls *.metadata 2>/dev/null | sed 's/\.metadata$//')
+  [[ -z "$tables" ]] && { zenity --info --text="No tables found"; return; }
 
-  if [[ -z "$tables" ]]; then
-    zenity --info --text="No tables found in this database"
-  else
-    zenity --list \
-      --title="Tables in $DB_NAME" \
-      --column="Table Name" \
-      $tables
-  fi
+  zenity --list --title="Tables in $DB_NAME" --column="Table Name" $tables
 }
 
+# ===== Drop Table =====
 function dropTable {
-  # عرض أسماء الجداول فقط
-  tables=$(ls "$DB_PATH" \
-    | grep -v "\.metadata$" \
-    | grep -v "\.data$")
-
-  if [[ -z "$tables" ]]; then
-    zenity --info --text="No tables to drop"
-    return
-  fi
+  tables=$(ls *.metadata 2>/dev/null | sed 's/\.metadata$//')
+  [[ -z "$tables" ]] && { zenity --info --text="No tables to drop"; return; }
 
   table=$(zenity --list --title="Drop Table" --column="Tables" $tables)
-  if [[ -z "$table" ]]; then
-    zenity --warning --text="No table selected"
-    return
-  fi
+  [[ -z "$table" ]] && { zenity --warning --text="No table selected"; return; }
 
-  # حذف الجدول وملف الميتاداتا المرتبط به
-  rm -f "$DB_PATH/$table" "$DB_PATH/$table.metadata"
-    rm -f "$DB_PATH/$table" "$DB_PATH/$table.data"
-
+  rm -f "$table.metadata" "$table.data"
   zenity --info --text="Table '$table' dropped successfully"
 }
 
-
+# ===== Insert Into Table =====
 function insertTable {
-
-  # ===== List Tables (without .metadata & .data) =====
-  tables=$(ls "$DB_PATH" | grep -vE "\.(metadata|data)$")
-  if [[ -z "$tables" ]]; then
-    zenity --info --text="No tables found"
-    return
-  fi
+  # ===== List tables =====
+  tables=$(ls *.metadata 2>/dev/null | sed 's/\.metadata$//')
+  [[ -z "$tables" ]] && { zenity --info --text="No tables found"; return; }
 
   table_input=$(zenity --list --title="Insert Into Table" --column="Tables" $tables)
-  if [[ -z "$table_input" ]]; then
-    zenity --warning --text="No table selected"
-    return
-  fi
+  [[ -z "$table_input" ]] && { zenity --warning --text="No table selected"; return; }
 
-  # ===== Case-insensitive exact match =====
-  table=$(ls "$DB_PATH" | awk -v t="$table_input" 'tolower($0)==tolower(t)')
-  meta_file="$DB_PATH/$table.metadata"
-  data_file="$DB_PATH/$table.data"
+  # Case-insensitive match
+  table=$(ls *.metadata | awk -v t="$table_input" 'tolower($0)==tolower(t".metadata")' | sed 's/\.metadata$//')
+  meta_file="$table.metadata"
+  data_file="$table.data"
 
-  # ===== Auto Increment ID =====
+  # ===== Write column names if data file is empty =====
   if [[ ! -s "$data_file" ]]; then
-    new_id=1
-  else
-    last_id=$(tail -n 1 "$data_file" | cut -d':' -f1)
-    new_id=$((last_id + 1))
+    cols="id"
+    while IFS=: read -r col_name col_type col_key; do
+      [[ "$col_name" == "id" ]] && continue
+      cols="$cols:$col_name"
+    done < "$meta_file"
+    echo "$cols" > "$data_file"
   fi
 
+  # Auto-increment ID (skip header line)
+  last_id=$(tail -n +2 "$data_file" | tail -n1 | cut -d':' -f1)
+  if [[ -z "$last_id" ]]; then new_id=1; else new_id=$((last_id + 1)); fi
   record="$new_id"
 
-  # ===== Read Metadata =====
+  # Insert based on metadata
   while IFS=: read -r col_name col_type col_key; do
-
-    # Skip ID (auto-generated)
     [[ "$col_name" == "id" ]] && continue
-
     while true; do
-      value=$(zenity --entry \
-        --title="Insert Value" \
-        --text="Enter value for $col_name")
-
-      [[ -z "$value" ]] && {
-        zenity --warning --text="Value cannot be empty"
-        continue
-      }
-
-      # ===== Integer Validation =====
+      value=$(zenity --entry --title="Insert Value" --text="Enter value for $col_name ($col_type)")
+      [[ -z "$value" ]] && { zenity --warning --text="Value cannot be empty"; continue; }
       if [[ "$col_type" == "int" && ! "$value" =~ ^[0-9]+$ ]]; then
-        zenity --warning --text="$col_name must be a number"
-        continue
+        zenity --warning --text="$col_name must be a number"; continue
       fi
-
-      # ===== String Validation =====
-      if [[ "$col_type" == "string" ]]; then
-        if [[ "$value" == *":"* ]]; then
-          zenity --warning --text="':' character is not allowed"
-          continue
-        fi
+      if [[ "$col_type" == "string" && "$value" == *":"* ]]; then
+        zenity --warning --text="':' character is not allowed"; continue
       fi
-
-      record="$record:$value"
-      break
+      record="$record:$value"; break
     done
-
   done < "$meta_file"
 
-  # ===== Insert Record =====
+  # Append record
   echo "$record" >> "$data_file"
   zenity --info --text="Record inserted successfully into table '$table'"
 }
-function updateTable {
 
-  # ===== List Tables =====
-  tables=$(ls "$DB_PATH" | grep -vE "\.(metadata|data)$")
-  [[ -z "$tables" ]] && {
-    zenity --info --text="No tables found"
-    return
-  }
+
+# ===== Update Table =====
+function updateTable {
+  tables=$(ls *.metadata 2>/dev/null | sed 's/\.metadata$//')
+  [[ -z "$tables" ]] && { zenity --info --text="No tables found"; return; }
 
   table_input=$(zenity --list --title="Update Table" --column="Tables" $tables)
   [[ -z "$table_input" ]] && return
 
-  table=$(ls "$DB_PATH" | awk -v t="$table_input" 'tolower($0)==tolower(t)')
-  meta_file="$DB_PATH/$table.metadata"
-  data_file="$DB_PATH/$table.data"
+  table=$(ls *.metadata | awk -v t="$table_input" 'tolower($0)==tolower(t".metadata")' | sed 's/\.metadata$//')
+  meta_file="$table.metadata"
+  data_file="$table.data"
 
-  [[ ! -s "$data_file" ]] && {
-    zenity --info --text="Table '$table' has no data"
-    return
-  }
+  [[ ! -s "$data_file" ]] && { zenity --info --text="Table '$table' has no data"; return; }
 
-  # ===== Choose Record by ID =====
   ids=$(cut -d':' -f1 "$data_file")
   record_id=$(zenity --list --title="Select Record ID" --column="ID" $ids)
   [[ -z "$record_id" ]] && return
 
-  # ===== Get Columns (Except ID) =====
   cols=()
-  while IFS=: read -r name type key; do
-    [[ "$name" != "id" ]] && cols+=("$name")
-  done < "$meta_file"
-
+  while IFS=: read -r name type key; do [[ "$name" != "id" ]] && cols+=("$name"); done < "$meta_file"
   col_name=$(zenity --list --title="Select Column to Update" --column="Columns" "${cols[@]}")
   [[ -z "$col_name" ]] && return
 
-  # ===== Get Column Type =====
   col_type=$(awk -F: -v c="$col_name" '$1==c {print $2}' "$meta_file")
+  col_index=$(awk -F: -v c="$col_name" 'BEGIN{idx=0}{idx++} $1==c{print idx}' "$meta_file")
 
-  # ===== Get Column Index =====
-  col_index=$(awk -F: -v c="$col_name" '
-    BEGIN{idx=0}
-    {idx++}
-    $1==c {print idx}
-  ' "$meta_file")
-
-  # ===== New Value =====
   while true; do
     new_value=$(zenity --entry --title="Update Value" --text="Enter new value for $col_name ($col_type)")
-    [[ -z "$new_value" ]] && {
-      zenity --warning --text="Value cannot be empty"
-      continue
-    }
-
+    [[ -z "$new_value" ]] && { zenity --warning --text="Value cannot be empty"; continue; }
     if [[ "$col_type" == "int" && ! "$new_value" =~ ^[0-9]+$ ]]; then
-      zenity --warning --text="$col_name must be a number"
-      continue
+      zenity --warning --text="$col_name must be a number"; continue
     fi
-
     if [[ "$col_type" == "string" && "$new_value" == *":"* ]]; then
-      zenity --warning --text="':' character is not allowed"
-      continue
+      zenity --warning --text="':' character is not allowed"; continue
     fi
     break
   done
 
-  # ===== Update Record =====
   awk -F: -v OFS=: -v id="$record_id" -v idx="$col_index" -v val="$new_value" '
     $1==id {$idx=val} {print}
   ' "$data_file" > "$data_file.tmp" && mv "$data_file.tmp" "$data_file"
@@ -309,5 +188,19 @@ function updateTable {
   zenity --info --text="Record with ID $record_id updated successfully"
 }
 
+# ===== Connect to DB =====
+function choose_db {
+  DB_NAME=$(zenity --entry --title="Enter to Database Folder" --text="Enter database name")
+  [[ -z "$DB_NAME" ]] && return
 
-Menu;
+  if [[ ! -d "$DB_NAME" ]]; then
+    zenity --warning --text="Database '$DB_NAME' does not exist"
+    return
+  fi
+
+  cd "$DB_NAME" || { zenity --error --text="Failed to enter database directory"; return; }
+  Menu
+}
+
+# ===== Entry Point =====
+choose_db
