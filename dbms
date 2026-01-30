@@ -11,52 +11,81 @@ function feedback {
   fi
 }
 
-function get_dbs_count {
-  all_dbs=(*/);
-
-  if [[ $all_dbs == "*/" ]]
-  then
-    zenity --info --text="No databases founded"
-    exit 1;
-  fi
-
-  dbs_count=${#all_dbs[@]};
-  return $dbs_count;
-}
-
-# ----------- Features Functions -----------
 
 function list_dbs {
-  dbs=` ls -d */ | sed 's:/$::' `
-  zenity --list --title="Your Databases" --column="Databases" $dbs
+
+  mapfile -t dbs < <(ls -d */  | sed 's:/$::')
+
+  if [[ ${#dbs[@]} -eq 0 ]]; then
+      zenity --info --text="No databases found!"
+      return;
+  fi
+
+
+  zenity --list \
+    --title="Your Databases" \
+    --column="Databases" \
+    "${dbs[@]}"
 }
+
 
 function create_db {
-  db_name=${USER_INPUT=$(zenity --entry --title="Input required" --text="Enter DataBase Name:")};
-  mkdir "$db_name";
+  db_name=$(zenity --entry --title="Input required" --text="Enter Database Name:")
 
-  feedback $? "Database created successfully" "Failed to create database";
+
+  if [[ -d "$db_name" ]]; then
+    zenity --warning --text="Database '$db_name' already exists!"
+    return
+  fi
+
+  mkdir "$db_name"
+ 
+ feedback $? "Database '$db_name' created  successfully!" "Failed to create database"
 }
+
 
 function connect_db {
-  get_dbs_count;
-  dbs_count=$?;
 
-  dbs=` ls -d */ | sed 's:/$::' `
-  target_db=` zenity --list --title="Please select an option to start" --column="Databases" $dbs `;
+  mapfile -t dbs < <(ls -d */  | sed 's:/$::')
 
-  . ./db "$target_db";
+  if [[ ${#dbs[@]} -eq 0 ]]; then
+      zenity --info --text="No databases found!"
+      return
+  fi
+
+  target_db=$(zenity --list \
+    --title="Please select a database to connect" \
+    --column="Databases" \
+    "${dbs[@]}")
+
+  [[ -z "$target_db" ]] && return
+
+  
+  . ./db "$target_db"
 }
 
+
 function drop_db {
-  get_dbs_count;
-  dbs_count=$?;
 
-  dbs=` ls -d */ | sed 's:/$::' `
-  target_db=` zenity --list --title="Please select an option to start" --column="Databases" $dbs `;
+  mapfile -t dbs < <(ls -d */ | sed 's:/$::')
 
-  rm -rf $target_db;
-  feedback $? "Database dropped successfully" "Failed to drop database";
+  if [[ ${#dbs[@]} -eq 0 ]]; then
+    zenity --info --text="No databases found to drop!"
+    return
+  fi
+
+  target_db=$(zenity --list \
+    --title="Please select a database to drop" \
+    --column="Databases" \
+    "${dbs[@]}")
+
+
+
+  zenity --question --text="Are you sure you want to delete '$target_db'?"
+  [[ $? -ne 0 ]] && return
+
+  rm -rf "$target_db"
+  feedback $? "Database dropped successfully" "Failed to drop database"
 }
 
 # ----------- Entry Point Function -----------

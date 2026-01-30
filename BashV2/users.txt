@@ -1,7 +1,0 @@
-id|name|age|password
-1|karam|22|asdasdasd
-2|karam2|22|asdasdasd
-3|karam3|22|asdasdasd
-4|karam4|22|asdasdasd
-5|karam5|22|asdasdasd
-6|karam6|22|asdasdasd
