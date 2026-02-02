@@ -2,6 +2,19 @@
 
 DB_NAME="$1";
 
+function get_tables_count {
+  all_tables=(*.data);
+
+  if [[ $all_tables == "*.data" ]]
+  then
+    zenity --info --text="No tables founded"
+    break;
+  fi
+
+  tables_count=${#all_tables[@]};
+  return $tables_count;
+}
+
 # ===== Table Menu =====
 function Menu {
   while true; do
@@ -26,15 +39,18 @@ function Menu {
       "Select From Table") select_from_table ;;
       "Delete From Table") delete_from_table ;;
       "Update Table") updateTable ;;
-      "Back to Main Menu") return ;;
+      "Back to Main Menu")
+        cd ..;
+        break ;;
       "Exit")
         exit 0
         ;;
       *)
         if [ $? -eq 1 ]
         then
-          zenity --warning --text="Invalid choice, please select again";
+          exit 0;
         fi
+        zenity --warning --text="Invalid choice, please select again";
         ;;
     esac
   done
@@ -119,7 +135,6 @@ function dropTable {
   # feedback حسب نتيجة الحذف
   feedback $? "Table '$table' dropped successfully" "Failed to drop table '$table'"
 }
-
 
 # ===== Insert Into Table =====
 function insertTable {
@@ -223,116 +238,48 @@ function updateTable {
 # ===== Select from Table =====
 function select_from_table {
   while true; do
-    # Only get .data files if they exist
-    shopt -s nullglob
-    data_files=( *.data )
-    shopt -u nullglob
+    get_tables_count;
 
-    # Strip .data extension
-    tables=()
-    for f in "${data_files[@]}"; do
-      tables+=( "$(basename "$f" .data)" )
-    done
+    tables=` ls *.data | sed 's/\.data$//' `;
+    table_name=` zenity --list --title="Please select an option to start" --column="Tables" $tables `;
 
-    if [ ${#tables[@]} -eq 0 ]; then
-      zenity --info --text="No tables found"
-      return
+    if [ ! -f "$table_name.data" ]
+    then
+      echo "Table not found";
+      break;
     fi
 
-    table_name=$(zenity --list \
-      --title="Select Table" \
-      --column="Tables" "${tables[@]}")
+      option=`  zenity --list --title="Please select an option to start" --column="option" "Select All" "Select using Where" "Back" `;
 
-    [ -z "$table_name" ] && return
-
-    option=$(zenity --list \
-      --title="Select Option" \
-      --column="Option" \
-      "Select All" "Select using Where" "Back")
-
-    case "$option" in
-      "Select All") select_all "$table_name.data" ;;
-      "Select using Where") select_where "$table_name.data" ;;
-      "Back"|"") return ;;
+    case $option in
+      "Select All")
+        select_all "$table_name.data"
+        ;;
+      "Select using Where")
+        select_where "$table_name.data"
+        ;;
+      "Back")
+        break
+        ;;
+      *) 
+        echo "Invalid option"
+        ;;
     esac
-  done
+  done;
 }
 
 function select_all {
-  table="$1"
-
-  if [ ! -s "$table" ]; then
-    zenity --info --text="Table is empty"
-    return
-  fi
-
-  column -t -s ':' "$table" | zenity --text-info \
-    --title="Table Data" \
-    --width=700 \
-    --height=400 \
-    --font="monospace"
+  table="$1";
+  column -t -s ':' "$table" | zenity --text-info --title="Table Data" --width="800" --height="600" --font="monospace";
 }
 
 function select_where {
-  table="$1"
-
-  while true
-  do
-    columns=$(head -n 1 "$table")
-    IFS=':' read -ra cols <<< "$columns"
-
-    attr=$(zenity --list --title="Select Column" --column="Attributes" "${cols[@]}")
-    [ -z "$attr" ] && return
-
-    value=$(zenity --entry --title="Input required" --text="Enter value:")
-    [ -z "$value" ] && continue
-
-    col_index=0
-    for i in "${!cols[@]}"; do
-      if [ "${cols[$i]}" = "$attr" ]; then
-        col_index=$((i + 1))
-        break
-      fi
-    done
-
-    awk -F ':' -v col="$col_index" -v val="$value" '
-      NR > 1 && $col == val {print}
-    ' "$table" |
-    column -t -s ':' |
-    zenity --text-info \
-      --title="Query Result" \
-      --width=700 \
-      --height=400 \
-      --font="monospace"
-
-    return
-  done
-}
-
-# ===== Delete from Table =====
-function delete_from_table {
-    mapfile -t tables < <(ls *.metadata 2>/dev/null | sed 's/\.metadata$//')
-
-  # لو مفيش جداول
-  if [[ ${#tables[@]} -eq 0 ]]; then
-    zenity --info --text="No tables to delete"
-    return
-  fi
-
-  tables=` ls *.data | sed 's/\.data$//' `
-  table_name=` zenity --list --title="Please select an option to start" --column="Tables" $tables `;
-
-  if [ ! -f "$table_name.data" ]
-  then
-    echo "Table not found";
-    return ;
-  fi
-
-  columns=$(head -n 1 "$table_name.data");
+  table="$1";
+  columns=$(head -n 1 "$table");
   IFS=':' read -ra cols <<< "$columns";
 
-  attr=` zenity --list --title="Please select an column to start" --column="Attributes" ${cols[@]} `;
-  value=` zenity --entry --title="Input required" --text="Enter value to delete:" `;
+  attr=`  zenity --list --title="Please select an column to start" --column="Attributes" ${cols[@]} `;
+  value=`  zenity --entry --title="Input required" --text="Enter value:" `;
 
   col_index=0;
   for i in "${!cols[@]}"
@@ -344,44 +291,88 @@ function delete_from_table {
     fi
   done
 
-  match=` awk -F ':' -v col="$col_index" -v val="$value" '{ if (NR > 1 && $col == val) print $0; }' "$table_name.data" `;
+  result=` awk -F ':' -v col="$col_index" -v val="$value" '{ if (NR > 1 && $col == val) print $0; }' "$table" `;
 
-  if [ -z "$match" ];
+  if [ -z "$result" ];
   then
     zenity --info --text="No matching records found";
-    return;
+    break;
   fi
 
-  zenity --question --text="Are you sure you want to delete these records?";
-  if [ $? -ne 0 ]
-  then
-    exit 0;
-  fi
-
-  awk -F ':' -v col="$col_index" -v val="$value" '
-    NR==1 {print; next}
-    $col != val {print}
-  ' "$table_name.data" > temp.data
-
-  mv temp.data "$table_name.data"
-
-  zenity --info --text="Record(s) deleted successfully!"
+  column -t -s ':' <<< "$result" | zenity --text-info --title="Table Data" --width="800" --height="600" --font="monospace";
 }
 
+# ===== Delete from Table =====
+function delete_from_table {
+  while true; do
+    get_tables_count;
+
+    tables=` ls *.data | sed 's/\.data$//' `
+    table_name=` zenity --list --title="Please select an option to start" --column="Tables" $tables `;
+
+    if [ ! -f "$table_name.data" ]
+    then
+      echo "Table not found";
+      break;
+    fi
+
+    columns=$(head -n 1 "$table_name.data");
+    IFS=':' read -ra cols <<< "$columns";
+
+    attr=` zenity --list --title="Please select an column to start" --column="Attributes" ${cols[@]} `;
+    value=` zenity --entry --title="Input required" --text="Enter value to delete:" `;
+
+    col_index=0;
+    for i in "${!cols[@]}"
+    do
+      if [ "${cols[$i]}" = "$attr" ];
+      then
+        col_index=$((i + 1));
+        break;
+      fi
+    done
+
+    match=` awk -F ':' -v col="$col_index" -v val="$value" '{ if (NR > 1 && $col == val) print $0; }' "$table_name.data" `;
+
+    if [ -z "$match" ];
+    then
+      zenity --info --text="No matching records found";
+      break;
+    fi
+
+    zenity --question --text="Are you sure you want to delete these records?";
+    if [ $? -ne 0 ]
+    then
+      break;
+    fi
+
+    awk -F ':' -v col="$col_index" -v val="$value" '
+      NR==1 {print; next}
+      $col != val {print}
+    ' "$table_name.data" > temp.data
+
+    mv temp.data "$table_name.data"
+
+    zenity --info --text="Record(s) deleted successfully!";
+  done
+}
+
+# ===== Connect to DB =====
 function choose_db {
-  local BASE_DIR=$(pwd)   
+  # local BASE_DIR=$(pwd)   
 
-  DB_NAME=$(zenity --entry --title="Enter Database Folder" --text="Enter database name")
-  [[ -z "$DB_NAME" ]] && return
+  # DB_NAME=$(zenity --entry --title="Enter Database Folder" --text="Enter database name")
+  # [[ -z "$DB_NAME" ]] && return
 
-  if [[ ! -d "$DB_NAME" ]]; then
-    zenity --warning --text="Database '$DB_NAME' does not exist"
-    return
-  fi
+  # if [[ ! -d "$DB_NAME" ]]; then
+  #   zenity --warning --text="Database '$DB_NAME' does not exist"
+  #   return
+  # fi
 
   cd "$DB_NAME" || { zenity --error --text="Failed to enter database directory"; return; }
   Menu
-  cd "$BASE_DIR"   
+  # cd "$BASE_DIR"   
 }
 
+# ===== Entry Point =====
 choose_db
